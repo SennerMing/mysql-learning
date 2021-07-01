@@ -627,6 +627,16 @@ mysql> insert into t values(2,'hello',2,'mysql');
 
 ![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition1.png)
 
+如果筛选条件全是组合索引最左连续列作为搜索键，将构建连续列组合索引树。（比如：index(a,b)却不能index(a,c)）
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition4.png)
+
+MySQL查询优化器会优化and连接，将组合索引列规则排号。（比如：b and a 等同于 a and b）
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition5.png)
+
+##### 
+
 查询列都是组合索引列且筛选条件全是组合索引列时，会构建满列组合索引树（index(a,b,c) ）【覆盖索引】
 
 ![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition2.png)
@@ -635,13 +645,448 @@ mysql> insert into t values(2,'hello',2,'mysql');
 
 ![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition3.png)
 
-如果筛选条件全是组合索引最左连续列作为搜索键，将构建连续列组合索引树。（比如：index(a,b)却不能index(a,c)）
+##### 1.3.7.5 前缀索引
 
-![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition4.png)
+有时候需要索引很长的字符列，这会让索引变得大且慢。通常可以以某列开始的部分字符作为索引，这样可以大大节约索引空间，从而提高索引效率。但这样也会降低索引的选择性。索引的选择性是指不重复的索引值和数据表的记录总数的比值，索引的选择性越高则查询效率越高。
 
-MySQL查询优化器会优化and连接，将组合索引列规则排号。（比如：b and a 等同于 a and b）
+以下是一个百万级数据表的简化呈现
 
-![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/the-left-prefix-principle-condition5.png)
+![prefix-index](/Users/liuxiangren/mysql-learning/senior-img/prefix-index-example.png)
+
+图一 area 字段没有设置为索引，图二 area 字段设置为前4字符作为索引，图三 area 字段设置前5字符作为索引，当数据是百万当量时候，毫无疑问，图三的索引速度将大大优越于前两个图场景。
+
+```sql
+CREATE TABLE `x_test` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `x_name` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8
+```
+
+通过存储过程插入10万数据（不建议使用此方法，太慢了）
+
+```sql
+DROP PROCEDURE IF EXISTS proc_initData;
+DELIMITER $
+CREATE PROCEDURE proc_initData()
+BEGIN
+    DECLARE i INT DEFAULT 1;
+    WHILE i<=100000 DO
+        INSERT INTO x_test VALUES(null,RAND()*100000);
+        SET i = i+1;
+    END WHILE;
+END $
+CALL proc_initData();
+```
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/ten-milion-records-example.png)
+
+不使用索引查询某条记录
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/ten-milion-records-example-no-key.png)
+
+使用索引查询某条记录
+
+```sql
+alter table x_test add index(x_name(4));
+```
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/ten-milion-records-example-with-key.png)
+
+前缀字符并非越多越好，需要在索引的选择性和索引IO读取量中做出衡量。
+
+##### 1.3.7.5 覆盖索引与回表
+
+上文我们介绍过索引可以划分为聚簇索引和辅助索引。在InnoDB中的主键索引就是聚簇索引，主键索引的查询效率也是非常高的，除此之外，还有非聚簇索引，其查询效率稍逊。覆盖索引其形式就是，搜索的索引键中的字段恰好是查询的字段（或是组合索引键中的其它字段）。覆盖索引的查询效率极高，原因在与其不用做回表查询。
+student表中存在组合索引 stu_class_phone(name,c_id,phone)，student表结构如下：
+
+```sql
+mysql> desc student;
++----------+--------------+------+-----+---------+----------------+
+| Field    | Type         | Null | Key | Default | Extra          |
++----------+--------------+------+-----+---------+----------------+
+| id       | int(11)      | NO   | PRI | NULL    | auto_increment |
+| name     | varchar(255) | NO   | MUL | NULL    |                |
+| c_id     | int(11)      | YES  |     | NULL    |                |
+| phone    | char(11)     | YES  |     | NULL    |                |
+| guardian | varchar(50)  | NO   |     | NULL    |                |
++----------+--------------+------+-----+---------+----------------+
+```
+
+最直观的呈现：（通过explain执行分析SQL可观测到Extra字段值包含Using index）
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/cover-and-back-table-index-a.png)
+
+当然对于组合索引你还可以查询组合索引键中的其他字段：
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/cover-and-back-table-index-c.png)
+
+但是不能包含杂质搜索键（不属于所搜索索引中的列）
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/cover-and-back-table-index-other.png)
+
+典型使用场景： 全表count查询，根据某关键字建立索引，直接count（关键字）即可，如果是count(\*) 则需要回表搜索。（此项做保留，近期发现count(\*) 也是使用了using index，有可能是新版本mysql内部做了优化处理
+
+```sql
+alter table student add key(name);
+
+mysql> explain select count(name) from student;
++----+-------------+---------+------------+-------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table   | partitions | type  | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+---------+------------+-------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | student | NULL       | index | NULL          | name | 767     | NULL |    1 |   100.00 | Using index |
++----+-------------+---------+------------+-------+---------------+------+---------+------+------+----------+-------------+
+```
+
+##### 1.3.7.6 回表
+
+查询的列数据作为索引树的键值，直接在索引树中得到反馈（存在于索引节点），不用遍历如InnoDB中的叶子节点（存放数据表各行数据）就可得到查询的数据（不用回表）。
+
+下面以InnoDB表中的辅助索引作图示说明：
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/back-table-example.png)
+
+##### 1.3.7.7 全文索引 FULLTEXT
+
+通过数值比较、范围过滤等就可以完成绝大多数我们需要的查询，但是，如果希望通过关键字的匹配来进行查询过滤，那么就需要基于相似度的查询，而不是原来的精确数值比较。全文索引，就是为这种场景设计的，通过建立倒排索引,可以极大的提升检索效率,解决判断字段是否包含的问题。
+
+```markdown
+FULLTEXT VS LIKE+%
+```
+
+使用LIKE+%确实可以实现模糊匹配，适用于文本比较少的时候。对于大量的文本检索，LIKE+%与全文索引的检索速度相比就不是一个数量级的。
+
+例如: 有title字段，需要查询所有包含 "政府"的记录.，使用 like "%政府%“方式查询，查询速度慢（全表查询）。且当查询包含"政府” OR "中国"的字段时，使用like就难以简单满足，而全文索引就可以实现这个功能。
+
+```sql
+FULLTEXT的支持情况
+```
+
+- MySQL 5.6 以前的版本，只有 MyISAM 存储引擎支持全文索引；
+- MySQL 5.6 及以后的版本，MyISAM 和 InnoDB 存储引擎均支持全文索引;
+- 只有字段的数据类型为 char、varchar、text 及其系列才可以建全文索引
+
+InnoDB内部并不支持中文、日文等，因为这些语言没有分隔符。可以使用插件辅助实现中文、日文等的全文索引。
+
+###### 1.3.7.7.1 创建全文索引
+
+```sql
+//建表的时候
+FULLTEXT KEY keyname(colume1,colume2)  // 创建联合全文索引列
+
+//在已存在的表上创建
+create fulltext index keyname on xxtable(colume1,colume2);
+
+alter table xxtable add fulltext index keyname (colume1,colume2);
+```
+
+###### 1.3.7.7.2 使用全文索引
+
+全文索引有独特的语法格式，需要配合match 和 against 关键字使用
+
+- match()函数中指定的列必须是设置为全文索引的列
+- against()函数标识需要模糊查找的关键字
+
+```sql
+create table fulltext_test(
+     id int auto_increment primary key,
+     words varchar(2000) not null,a
+     artical text not null,
+     fulltext index words_artical(words,artical)
+)engine=innodb default charset=utf8;
+
+insert into fulltext_test values(null,'a','a');
+insert into fulltext_test values(null,'aa','aa');
+insert into fulltext_test values(null,'aaa','aaa');
+insert into fulltext_test values(null,'aaaa','aaaa');
+```
+
+好，我们使用全文搜索查看一下
+
+```sql
+select * from fulltext_test where match(words,artical) against('a');
+select * from fulltext_test where match(words,artical) against('aa');
+select * from fulltext_test where match(words,artical) against('aaa');
+select * from fulltext_test where match(words,artical) against('aaaa');
+```
+
+发现只有aaa和aaaa才能查到记录，为什么会这样呢？
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/usage-of-full-text-index.png)
+
+###### 1.3.7.7.3 全文索引关键词长度阈值
+
+这其实跟全文搜索的关键词的长度阈值有关，可以通过`show variables like '%ft%';`查看。可见InnoDB的全文索引的关键词 最小索引长度 为3。上文使用的是InnoDB引擎建表，同时也解释为什么只有3a以上才有搜索结果。
+
+![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/full-text-index-keyword-len-threshold.png)
+
+设置关键词长度阈值，可以有效的避免过短的关键词，得到的结果过多也没有意义。
+
+也可以手动配置关键词长度阈值，修改MySQL配置文件，在[mysqld]的下面追加以下内容，设置关键词最小长度为5。
+
+```sql
+[mysqld]
+innodb_ft_min_token_size = 5
+ft_min_word_len = 5
+```
+
+然后重启MySQL服务器，还要修复索引，不然参数不会生效
+
+```sql
+repair table 表名 quick;
+```
+
+为什么上文搜索关键字为aaa的时候，有且仅有一条aaa的记录，为什么没有aaaa的记录呢？
+
+###### 1.3.7.7.4 全文索引模式
+
+**自然语言的全文索引 IN NATURAL LANGUAGE MODE**
+
+默认情况下，或者使用 IN NATURAL LANGUAGE MODE 修饰符时，match() 函数对文本集合执行自然语言搜索，上面的例子都是自然语言的全文索引。
+
+自然语言搜索引擎将计算每一个文档对象和查询的相关度。这里，相关度是基于匹配的关键词的个数，以及关键词在文档中出现的次数。在整个索引中出现次数越少的词语，匹配时的相关度就越高。
+
+MySQL在全文查询中会对每个合适的词都会先计算它们的权重，如果一个词出现在多个记录中，那它只有较低的权重；相反，如果词是较少出现在这个集的文档中，它将得到一个较高的权重。
+
+MySQL默认的阀值是50%。如果一个词语的在超过 50% 的记录中都出现了，那么自然语言的搜索将不会搜索这类词语。
+
+上文关键词长度阈值是3，所以相当于只有两条记录：aaa 和 aaaa
+aaa 权重 2/2=100% 自然语言的搜索将不会搜索这类词语aaa了 而是进行精确查找 aaaa不会出现在aaa的结果集中。
+
+这个机制也比较好理解，比如一个数据表存储的是一篇篇的文章，文章中的常见词、语气词等等，出现的肯定比较多，搜索这些词语就没什么意义了，需要搜索的是那些文章中有特殊意义的词，这样才能把文章区分开。
+**布尔全文索引 IN BOOLEAN MODE**
+
+在布尔搜索中，我们可以在查询中自定义某个被搜索的词语的相关性，这个模式和lucene中的BooleanQuery很像,可以通过一些操作符,来指定搜索词在结果中的包含情况。
+
+建立如下表：
+
+```sql
+CREATE TABLE articles (
+    id INT UNSIGNED AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    title VARCHAR(200),
+    body TEXT,
+    FULLTEXT (title,body)
+) ENGINE=InnoDB
+```
+
+- `+` （AND）全文索引列必须包含该词且全文索引列（之一）有且仅有该词
+- `-` （NOT）表示必须不包含,默认为误操作符。如果只有一个关键词且使用了`-` ，会将这个当成错误操作，相当于没有查询关键词；如果有多个关键词，关键词集合中不全是负能符（`~ -`），那么`-`则强调不能出现。
+
+```sql
+-- 查找title,body列中有且仅有apple（是apple不是applexx 也不是 xxapple）但是不含有banana的记录
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('+apple -banana' IN BOOLEAN MODE);
+```
+
+- `>` 提高该词的相关性，查询的结果靠前
+- `<` 降低该词的相关性，查询的结果靠后
+
+```sql
+-- 返回同时包含apple（是apple不是applexx 也不是 xxapple）和banana或者同时包含apple和orange的记录。但是同时包含apple和banana的记录的权重高于同时包含apple和orange的记录。
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('+apple +(>banana <orange)' IN BOOLEAN MODE);
+```
+
+- `~` 异或，如果包含则降低关键词整体的相关性
+
+```sql
+-- 返回的记录必须包含apple（且不能是applexx 或 xxapple），但是如果同时也包含banana会降低权重（只出现apple的记录会出现在结果集前面）。但是它没有 +apple -banana 严格，因为后者如果包含banana压根就不返回。
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('+apple ~banana' IN BOOLEAN MODE);
+```
+
+- `*` 通配符，表示关键词后面可以跟任意字符
+
+```sql
+-- 返回的记录可以为applexx
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('apple*' IN BOOLEAN MODE);
+```
+
+- 空格 表示OR
+
+```sql
+-- 查找title,body列中包含apple（是apple不是applexx 也不是 xxapple）或者banana的记录，至少包含一个
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('apple banana' IN BOOLEAN MODE); 
+```
+
+- `""` 双引号，效果类似`like '%some words%'`
+
+```sql
+-- 模糊匹配 “apple banana goog”会被匹配到，而“apple good banana”就不会被匹配
+SELECT * FROM articles WHERE MATCH (title,body) AGAINST ('"apple banana"' IN BOOLEAN MODE);
+```
+
+###### 1.3.7.7.5 InnoDB中FULLTEXT中文支持
+
+InnoDB内部并不支持中文、日文等，因为这些语言没有分隔符。可以使用插件辅助实现中文、日文等的全文索引。
+
+MySQL内置ngram插件便可解决该问题。
+
+```sql
+FULLTEXT (title, body) WITH PARSER ngram
+ALTER TABLE articles ADD FULLTEXT INDEX ft_index (title,body) WITH PARSER ngram;
+CREATE FULLTEXT INDEX ft_index ON articles (title,body) WITH PARSER ngram;
+```
+
+##### 1.3.7.8 索引失效
+
+数据库表中添加索引后确实会让查询速度起飞，但前提必须是正确的使用索引来查询，如果以错误的方式使用，则即使建立索引也会不奏效。即使建立索引，索引也不会生效：
+
+```sql
+ create table tb1(
+     nid int auto_increment primary key,
+     name varchar(100) not null,
+     email varchar(100) not null,
+     num int,
+     no_index char(10),
+     index(name),
+     index(email),
+     index(num)
+)engine=innodb;
+```
+
+以下说明都 排除覆盖索引 情况下：
+
+###### 1.3.7.8.1 \> < 范围查询
+
+mysql 会一直向右匹配直到遇到索引搜索键使用`>、<`就停止匹配。一旦权重最高的索引搜索键使用`>、<`范围查询，那么其它`>、<`搜索键都无法用作索引。即索引最多使用一个`>、<`的范围列，因此如果查询条件中有两个`>、<`范围列则无法全用到索引。
+
+###### 1.3.7.8.2 like %xx
+
+如搜索键值以通配符`%开头`（如：`like '%abc'`），则索引失效，直接全表扫描；若只是以%结尾，则不影响索引构建。
+
+```sql
+mysql> explain select * from tb1 where name like '%oe';
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | NULL          | NULL | NULL    | NULL |    3 |    33.33 | Using where |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+```
+
+###### 1.3.7.8.3 对索引列进行运算
+
+如果查询条件中含有函数或表达式，将导致索引失效而进行全表扫描。 `select * from user where YEAR(birthday) < 1990`
+
+```sql
+mysql> explain select * from tb1 where length(name)>2;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | NULL          | NULL | NULL    | NULL |    3 |   100.00 | Using where |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+```
+
+###### 1.3.7.8.4 or 条件索引问题
+
+`or` 的条件列除了同时是主键的时候，索引才会生效。其他情况下的，无论条件列是什么，索引都失效。
+
+```sql
+mysql> explain select * from tb1 where nid=1 or nid=2;
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type  | possible_keys | key     | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | range | PRIMARY       | PRIMARY | 4       | NULL |    2 |   100.00 | Using where |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql> explain select * from tb1 where name='Joe' or name='Tom';
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | name          | NULL | NULL    | NULL |    3 |    66.67 | Using where |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+```
+
+###### 1.3.7.8.5 数据类型不一致（隐式类型转换导致的索引失效）
+
+如果列是字符串类型，传入条件是必须用引号引起来，不然报错或索引失效。
+
+```sql
+mysql> explain select * from tb1 where name=12;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | name          | NULL | NULL    | NULL |    3 |    33.33 | Using where |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+```
+
+###### 1.3.7.8.6 != 问题
+
+普通索引使用 `!=`索引失效，主键索引没影响。
+where语句中索引列使用了负向查询，可能会导致索引失效。
+负向查询包括：NOT、!=、<>、NOT IN、NOT LIKE等。
+
+```sql
+mysql> explain select * from tb1 where name!='Joe';
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | name          | NULL | NULL    | NULL |    3 |   100.00 | Using where |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+```
+
+###### 1.3.7.8.7 联合索引违背最左匹配原则
+
+联合索引中，where中索引列违背最左匹配原则，一定会导致索引失效（上文有说）
+
+###### 1.3.7.8.8 order by问题
+
+order by 对主键索引排序会用到索引，其他的索引失效
+
+```sql
+mysql> explain select * from tb1 order by name;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra          |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+|  1 | SIMPLE      | tb1   | NULL       | ALL  | NULL          | NULL | NULL    | NULL |    3 |   100.00 | Using filesort |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql> explain select * from tb1 order by nid;
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------+
+| id | select_type | table | partitions | type  | possible_keys | key     | key_len | ref  | rows | filtered | Extra |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------+
+|  1 | SIMPLE      | tb1   | NULL       | index | NULL          | PRIMARY | 4       | NULL |    3 |   100.00 | NULL  |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+-------+
+```
+
+##### 1.3.7.9 【主键妙用】LIMIT分页
+
+若需求是每页显示10条数据，如何建立分页？
+
+我们可以先使用LIMIT尝试：
+
+```sql
+--第一页
+SELECT * FROM table_name LIMIT 0,10;
+--第二页
+SELECT * FROM table_name LIMIT 10,10;
+--第三页
+SELECT * FROM table_name LIMIT 20,10;
+```
+
+但是这样做有如下弊端：
+每一条select语句都会从1遍历至当前位置，若跳转到第100页，则会遍历1000条记录
+
+改善：
+若已知每页的max_id和min_id，则可以通过主键索引来快速定位:
+
+```sql
+--下一页
+SELECT * FROM table_name WHERE id in (SELECT id FROM table_name WHERE id > max_id LIMIT 10);
+--上一页
+SELECT * FROM table_name WHERE id in (SELECT id FROM table_name WHERE id < min_id ORDER BY id DESC LIMIT 10);
+--当前页之后的某一页
+SELECT * FROM table_name WHERE id in (SELECT id FROM (SELECT id FROM (SELECT id FROM table_name WHERE id < min_id ORDER BY id desc LIMIT (页数差*10)) AS N ORDER BY N.id ASC LIMIT 10) AS P ORDER BY P.id ASC);
+--当前页之前的某一页
+SELECT * FROM table_name WHERE id in (SELECT id FROM (SELECT id FROM (SELECT id FROM table_name WHERE id > max_id LIMIT (页数差*10)) AS N ORDER BY N.id DESC LIMIT 10) AS P) ORDER BY id ASC;
+```
+
+可能版本会不支持：`This version of MySQL doesn't yet support 'LIMIT` 只要加多一个子查询即可
+
+```sql
+SELECT * FROM x_test WHERE id in (SELECT id FROM ( SELECT id FROM x_test WHERE id>max_id LIMIT 10) t);
+```
+
+
 
 
 
