@@ -130,6 +130,60 @@ B树的特征：
 - 其搜索性能等价于在关键字全集内做一次二分查找；
 - 自动层次控制；
 
+```markdown
+BTree又叫多路平衡搜索树，一棵M叉的BTree特性如下：
+ - 树中每个节点最多包含m个孩子
+ - 除根节点与叶子节点外，每个节点至少有[ceil(m/2)个孩子]
+ - 若根节点不是叶子节点，则至少有两个孩子
+ - 所有的叶子节点都在同一层
+ - 每个非叶子节点由n个key与n+1个指针组成，其中[ceil(m/2)-1] <= n <= m-1
+** ceil 向上取整 **
+
+以5叉BTree为例，key的数量：公式推导[ceil(m/2)-1] <= n <= m-1。所以2<=n<=4。当n>4时，中间节点分裂到父节点，两边节点分裂。
+```
+
+BTree小栗子：
+
+插入C N G A H E K Q M F W L T Z D P R X Y S数据为例。
+
+1. 插入前4个字母，下面五个小格子代表，每个给叶子节点由n个key和n+1个指针组成，这边就是4个key和5个指针
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-first.png" alt="image-20210701224101267" style="zoom:50%;" />
+
+2. 插入H，那么第一层已经没有位置了，也就是说n>4时，中间的元素G字母向上分裂到新的节点(G为什么是中间节点，你想想26个英文字母顺序：A...C...G H..N，这样一排列这5个字母，G可不就是在中间啦)
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-second.png" alt="image-20210701215459300" style="zoom:50%;" />
+
+3. 插入E，K，Q不需要分裂
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-third.png" alt="image-20210701220044621" style="zoom:50%;" />
+
+4. 插入M，中间元素M字母向上分裂到父节点G；思路是，M比G大走右边，但是右边子树已经有4个节点了，所以进行排序找出中间的元素(..H..K..M..N..Q)，那中间的字母就是要插入的M，按照前面的BTree规则，只要超过了4个节点，中间的就要向上分裂，然后就想第2步那样分裂成[HK] [NQ]、那么就变成
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-forth.png" alt="image-20210701225149796" style="zoom:50%;" />
+
+5. 插入F，W，L，T不需要分裂
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-fifth.png" alt="image-20210701225833755" style="zoom:50%;" />
+
+6. 插入Z，中间元素T向上分裂到父节点中，那Z的位置应该是在第二层最右侧也就是(..N..Q..T..W..Z)，那么中间元素显而易见的就是T了
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-six.png" alt="image-20210701230416381" style="zoom:50%;" />
+
+7. 然后插入D，中间元素D向上分裂到父节点中，然后插入P,R,X,Y不需要分裂
+
+   <img src="/Users/liuxiangren/mysql-learning/senior-img/btree-character-seven.png" alt="image-20210701230859489" style="zoom:50%;" />
+
+8. 最后插入S，NPQR节点已经为4个了，中间的Q向上分裂，但分裂后父节点DGMT也是4个节点了，中间节点M向上分裂
+
+到此，该BTREE树就已经构建完成了，BTREE树和二叉树相比，查询数据的效率更高，因为对于相同的数量来说，BTREE的层级结构比二叉树小，因此搜索速度快。
+
+
+
+
+
+
+
 #### 1.3.2 B+TREE
 
 B+树是B-树的变体，也是一种多路搜索树
@@ -145,6 +199,26 @@ B+树的特征：
 - 非叶子结点相当于是叶子结点的索引（稀疏索引），叶子结点相当于是存储（关键字）数据的数据层；
 - 每一个叶子节点都包含指向下一个叶子节点的指针，从而方便叶子节点的范围遍历。
 - 更适合文件索引系统；
+
+```markdown
+B+Tree结构：
+B+Tree为BTree的变种，B+Tree与BTree的区别为：
+ - n叉B+Tree最多含有n个key，而BTree最多含有n-1个key
+ - B+Tree的叶子节点保存所有的key信息，依key大小顺序排列
+ - 所有的非叶子节点都可以看做是key的索引部分
+
+由于B+Tree只有叶子节点保存key信息，查询任何key都要从root走到叶子。所以B+Tree的查询效率更加稳定
+```
+
+##### 1.3.2.1 MySQL中的B+TREE
+
+MySQL索引数据结构对经典的B+TREE进行了优化。在原B+TREE的基础上，增加了一个指向相邻叶子节点的链表指针，就形成了带有顺序指针的B+TREE，提高了区间访问的性能。
+
+MySQL中的B+TREE索引结构示意图：
+
+![image-20210702160449953](/Users/liuxiangren/mysql-learning/senior-img/mysql-b+tree-index-struct-desc.png)
+
+
 
 
 
@@ -187,11 +261,11 @@ Hash索引仅仅能满足"=",“IN"和”<=>"查询，不能使用范围查询�
 
 MySQL 的索引有两种分类方式：逻辑分类和物理分类。
 
-##### 1.3.4.5 逻辑分类
+##### 1.3.4.1 逻辑分类
 
 有多种逻辑划分的方式，比如按功能划分，按组成索引的列数划分等
 
-###### 1.3.4.5.1 **按功能划分**
+###### 1.3.4.1.1 **按功能划分**
 
 - 主键索引：一张表只能有一个主键索引，不允许重复、不允许为 NULL；
 
@@ -217,7 +291,7 @@ ALTER TABLE TableName ADD INDEX IndexName(`字段名`(length));
 
 - 全文索引：它查找的是文本中的关键词，主要用于全文检索。（篇幅较长，下文有独立主题说明）
 
-###### 1.3.4.5.2 按列数划分
+###### 1.3.4.1.2 按列数划分
 
 - 单例索引：一个索引只包含一个列，一个表可以有多个单例索引。
 
@@ -225,11 +299,11 @@ ALTER TABLE TableName ADD INDEX IndexName(`字段名`(length));
 
 
 
-##### 1.3.4.6 物理分类
+##### 1.3.4.2 物理分类
 
 分为聚簇索引和非聚簇索引（有时也称辅助索引或二级索引）
 
-###### 1.3.4.6.1 聚簇索引和非聚簇索引
+###### 1.3.4.2.1 聚簇索引和非聚簇索引
 
 ```markdown
 聚簇是为了提高某个属性(或属性组)的查询速度，把这个或这些属性(称为聚簇码)上具有相同值的元组集中存放在连续的物理块。
@@ -316,6 +390,14 @@ auto_increment修饰的字段需要是一个候选键，需要用key指定，否
 ![在这里插入图片描述](/Users/liuxiangren/mysql-learning/senior-img/key-types-value.png)
 
 如果一个Key有多个约束，将显示约束优先级最高的， PRI>UNI>MUL
+
+##### 1.3.4.3 索引分类（最强版）
+
+1. 单值索引：即一个索引只包含单个列，一个表可以有多个单列索引
+2. 唯一索引：索引列的值必须唯一，但允许有空值
+3. 复合索引：即一个索引包含多个列
+
+
 
 #### 1.3.5 InnoDB和MyISAM实现
 
@@ -1093,6 +1175,1363 @@ SELECT * FROM x_test WHERE id in (SELECT id FROM ( SELECT id FROM x_test WHERE i
 ### 1.10 索引学习参考
 
 MySQL索引总结：https://blog.csdn.net/wangfeijiu/article/details/113409719
+
+## 2 索引(真枪实弹版)
+
+### 2.1 索引语法
+
+索引，在创建表的时候，可以同时创建，也可以随时增加新的索引。
+
+准备环境：
+
+```sql
+create database demo_01 default charset=utf8mb4;
+
+use demo_01;
+
+create table `city`(
+`city_id` int(11) NOT NULL AUTO_INCREMENT,
+`city_name` varchar(50) NOT NULL,
+`country_id` int(11) NOT NULL,
+PRIMARY KEY (`city_id`)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+create table country(
+country_id int(11) NOT NULL AUTO_INCREMENT,
+country_name varchar(100) NOT NULL,
+PRIMARY KEY (country_id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+
+insert into `city`(`city_id`,`city_name`,`country_id`) values(1,'西安',1);
+insert into `city`(`city_id`,`city_name`,`country_id`) values(2,'NewYork',2);
+insert into `city`(`city_id`,`city_name`,`country_id`) values(3,'北京',1);
+insert into `city`(`city_id`,`city_name`,`country_id`) values(4,'上海',1);
+
+
+insert into `country`(`country_id`,`country_name`) values(1,'CHINA');
+insert into `country`(`country_id`,`country_name`) values(2,'AMERICA');
+insert into `country`(`country_id`,`country_name`) values(3,'JAPAN');
+insert into `country`(`country_id`,`country_name`) values(4,'UK');
+
+
+#查看表结构
+desc city;
+#查看建表语句
+show create table city;
+```
+
+#### 2.1.1 创建索引
+
+语法：
+
+```sql
+CREATE [UNIQUE|FULLTEXT|SPATIAL] INDEX index_name
+[USING index_type]
+ON tbl_name(index_col_name,...)
+
+index_col_name : column_name[(length)][ASC | DESC]
+```
+
+示例：为city表中的city_name字段创建索引；
+
+```sql
+create index idx_city_name on city(city_name);
+```
+
+
+
+#### 2.1.2 查看索引
+
+语法：
+
+```sql
+show index from table_name;
+```
+
+示例：查看city表中的索引信息
+
+```sql
+show index from city \G;
+*************************** 1. row ***************************
+        Table: city
+   Non_unique: 0
+     Key_name: PRIMARY
+ Seq_in_index: 1
+  Column_name: city_id
+    Collation: A
+  Cardinality: 4
+     Sub_part: NULL
+       Packed: NULL
+         Null: 
+   Index_type: BTREE 【默认都是BTREE索引】
+      Comment: 
+Index_comment: 
+      Visible: YES
+   Expression: NULL
+*************************** 2. row ***************************
+        Table: city
+   Non_unique: 1
+     Key_name: idx_city_name
+ Seq_in_index: 1
+  Column_name: city_name
+    Collation: A
+  Cardinality: 4
+     Sub_part: NULL
+       Packed: NULL
+         Null: 
+   Index_type: BTREE 【默认都是BTREE索引】
+      Comment: 
+Index_comment: 
+      Visible: YES
+   Expression: NULL
+2 rows in set (0.01 sec)
+```
+
+#### 2.1.3 删除索引
+
+语法：
+
+```sql
+DROP INDEX index_name ON table_name;
+```
+
+示例：想要删除city表上的索引 idx_city_name，可以如下操作：
+
+```sql
+drop index idx_city_name on city;
+```
+
+#### 2.1.4 ALTER命令
+
+语法：
+
+```sql
+1). alter table tb_name add primary key(column_list);
+	该语句添加一个主键，这意味着索引值必须是唯一的，且不能为NULL
+	
+2). alter table tb_name add unique index_name(column_list);
+	该语句创建索引的值必须是唯一的(除了NULL外，NULL可能会出现多次)
+
+3). alter table tb_name add index index_name(column_list);
+	添加普通索引，索引值可以出现多次
+
+4). alter table tb_name add fulltext index_name(column_list);
+	该语句指定了索引为FULLTEXT，用于全文索引
+```
+
+### 2.2 索引设计原则
+
+索引的设计可以遵循一些已有的原则，创建索引的时候请尽量考虑符合这些原则，便于提升索引的使用效率，更高效的使用索引。
+
+- 对查询频次较高，且数据量比较大的表建立索引
+- 索引字段的选择，最佳候选列应当从where子句的条件中提取，如果where子句中的组合比较多，那么应当挑选最常用、过滤效果最好的列的组合
+- 使用唯一索引，区分度越高，使用索引的效率越高
+- 索引可以有效的提升查询数据的效率，但索引数量不是多多益善，索引越多，维护索引的代价自然也就水涨船高。对于插入、更新、删除等DML操作比较频繁的表来说，索引过多，会引入相当高的维护代价，降低DML操作的效率，增加相应操作的时间消耗。另外索引过多的话，MySQL也会犯选择困难症，虽然最终仍然会找到一个可用的索引，但无疑提高了选择的代价
+- 使用短索引，索引创建之后也是使用硬盘来存储的，因此提升索引访问的I/O效率，也可以提升总体的访问效率。假如构成索引的字段总长度比较短，那么在给定大小的存储块内可以存储更多的索引值，相应的可以有效提升MySQL访问索引的I/O效率
+- 利用最左前缀，N个列组合而成的组合索引，那么相当于是创建了N个索引，如果查询时where子句中使用了组成该索引的前几个字段，那么这条查询SQL可以利用组合索引来提升查询效率。
+
+```sql
+创建复合索引：
+create index idx_name_email_status on tb_seller(NAME,EMAIL,STATUS);
+
+就相当于
+	对name创建了索引；
+	对name，email创建了索引；
+	对name，email，status创建了索引；
+```
+
+## 3 视图
+
+### 3.1 视图概述
+
+视图(View)是一种虚拟存在的表。视图并不在数据库中实际存在，行和列数据来自定义视图的查询中使用的表，并且是在使用视图时动态生成的。通俗地讲，视图就是一条SELECT语句执行后返回的结果集。所以我们在创建视图的时候，主要的工作就落在创建这条SQL查询语句上。
+
+视图相对于普通的表的优势主要包括以下几项。
+
+- 简单：使用视图的用户完全不需要关心后面对应的表的结构、关联条件和筛选条件，对用户来说已经是过滤好的符合条件的结果集
+- 安全：使用视图的用户完全不需要关心后面对应的结构、关联条件和筛选条件，对用户来说已经是过滤好的符合条件的结果集。
+- 数据独立：一旦视图的结构确定了，可以屏蔽表结构变化对用户的影响，源表增加列对视图没有影响；源表修改列名，则可以通过修改视图来解决，不会造成对访问者的影响
+
+在实际应用当中，为mysql用户隐藏某些数据库字段
+
+### 3.2 创建或者修改视图
+
+创建视图的语法：
+
+```sql
+CREATE [OR REPLACE] [ALGORITHM = {UNDEFINED | MERGE | TEMPTABLE}]
+
+VIEW view_name [(column_list)]
+
+AS select_statement
+
+[WITH [CASCADED | LOCAL] CHECK OPTION]
+```
+
+修改视图的语法为：
+
+```sql
+ALTER [ALGORITHM = {UNDEFINED | MERGE | TEMPLATE}]
+
+VIEW view_name [(column_list)]
+
+AS select_statement
+
+[WITH [CASCADED | LOCAL] CHECK OPTION]
+```
+
+```markdown
+选项：
+	WITH [CASCADED | LOCAL] CHECK OPTION 决定了是否允许更新数据使记录不再满足视图的条件
+	
+	LOCAL : 只要满足本视图的条件就可以更新
+	CASCADED : 必须满足所有针对该视图的所有视图的条件才可以更新
+```
+
+实例：
+
+```sql
+需求：创建一个视图，显示国家和城市的信息
+
+#查询城市名和对应的国家名
+ select c.* ,t.country_name from city c,country t where c.country_id = t.country_id;
++---------+-----------+------------+--------------+
+| city_id | city_name | country_id | country_name |
++---------+-----------+------------+--------------+
+|       1 | 西安      |          1 | CHINA        |
+|       2 | NewYork   |          2 | AMERICA      |
+|       3 | 北京      |          1 | CHINA        |
+|       4 | 上海      |          1 | CHINA        |
++---------+-----------+------------+--------------+
+4 rows in set (0.00 sec)
+
+#那就是创建一个视图，内容就是上面查询出来的结果
+create view view_city_country as select c.* ,t.country_name from city c,country t where c.country_id = t.country_id;
+
+#那怎么去操作这个视图呢，前面提到过，这个视图其实就是一张虚拟的表， 那我们怎么操作表就怎么去操作视图
+select * from view_city_country;
++---------+-----------+------------+--------------+
+| city_id | city_name | country_id | country_name |
++---------+-----------+------------+--------------+
+|       1 | 西安      |          1 | CHINA        |
+|       2 | NewYork   |          2 | AMERICA      |
+|       3 | 北京      |          1 | CHINA        |
+|       4 | 上海      |          1 | CHINA        |
++---------+-----------+------------+--------------+
+4 rows in set (0.00 sec)
+
+#视图可不可以更新呢？答案是可以的
+update view_city_country set city_name='纽约' where city_id = 2;
+Query OK, 1 row affected (0.00 sec)
+Rows matched: 1  Changed: 1  Warnings: 0
+#查询出视图的结果
+select * from view_city_country;
++---------+-----------+------------+--------------+
+| city_id | city_name | country_id | country_name |
++---------+-----------+------------+--------------+
+|       1 | 西安      |          1 | CHINA        |
+|       2 | 纽约      |          2 | AMERICA      |
+|       3 | 北京      |          1 | CHINA        |
+|       4 | 上海      |          1 | CHINA        |
++---------+-----------+------------+--------------+
+4 rows in set (0.00 sec)
+
+
+#那么视图的修改结果会不会影响源表数据呢？答案是有影响的，其实更新语句操作的就是源表的数据
+select * from city;
++---------+-----------+------------+
+| city_id | city_name | country_id |
++---------+-----------+------------+
+|       1 | 西安      |          1 |
+|       2 | 纽约      |          2 |
+|       3 | 北京      |          1 |
+|       4 | 上海      |          1 |
++---------+-----------+------------+
+4 rows in set (0.00 sec)
+
+#其实视图这个视图到底能不能更新，还取决于上面提到的[WITH [CASCADED | LOCAL] CHECK OPTION]
+如果是 WITH LOCAL CHECK OPTION的话，那么只要满足本视图的条件就可以进行更新
+如果是 WITH CASCADED CHECK OPTION的话，那么必须满足针对该视图的所有视图的条件才可以更新，默认值。
+
+当使用WITH CHECK OPTION子句创建视图时，MySQL会通过视图检查正在更改的每个行，例如插入，更新，删除，以使其符合视图的定义。因为mysql允许基于另一个视图创建视图，它还会检查依赖视图中的规则以保持一致性。为了确定检查的范围，mysql提供了两个选项：LOCAL和CASCADED。如果我们没有在WITH CHECK OPTION子句中显式指定关键字，则mysql默认使用CASCADED。
+关于这两个检查级别可以参考：https://blog.csdn.net/luyaran/article/details/81018763
+```
+
+视图不建议进行更新操作，因为其的出现在生产中主要是为了简化查询而来。
+
+### 3.3 查看视图
+
+从MySQL5.1版本开始，使用SHOW TABLES命令的时候不仅显示表的名字，同时也会显示视图的名字，二不存在的单独显示视图的SHOW VIEWS命令
+
+```sql
+show tables;
++-------------------+
+| Tables_in_demo_01 |
++-------------------+
+| city              |
+| country           |
+| view_city_country |
++-------------------+
+3 rows in set (0.01 sec)
+```
+
+同样，在使用SHOW TABLES STATUS命令的时候，不但可以显示表的信息，同时也可以显示视图的信息
+
+```sql
+show table status like 'view_city_country' \G;
+*************************** 1. row ***************************
+           Name: view_city_country
+         Engine: NULL
+        Version: NULL
+     Row_format: NULL
+           Rows: NULL
+ Avg_row_length: NULL
+    Data_length: NULL
+Max_data_length: NULL
+   Index_length: NULL
+      Data_free: NULL
+ Auto_increment: NULL
+    Create_time: 2021-07-02 19:21:48
+    Update_time: NULL
+     Check_time: NULL
+      Collation: NULL
+       Checksum: NULL
+ Create_options: NULL
+        Comment: VIEW
+1 row in set (0.00 sec)
+```
+
+#### 3.3.1 查看创建视图语句
+
+```sql
+show create view view_city_country;
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+| View              | Create View                                                                                                                                                                                                                                                                                                                    | character_set_client | collation_connection |
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+| view_city_country | CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `view_city_country` AS select `c`.`city_id` AS `city_id`,`c`.`city_name` AS `city_name`,`c`.`country_id` AS `country_id`,`t`.`country_name` AS `country_name` from (`city` `c` join `country` `t`) where (`c`.`country_id` = `t`.`country_id`) | utf8mb4              | utf8mb4_0900_ai_ci   |
++-------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+1 row in set (0.01 sec)
+```
+
+### 3.4 删除视图
+
+语法：
+
+```sql
+DROP VIEW [IF EXISTS] view_name [,view_name] ...[RESTRICT | CASCADE]
+```
+
+实例：
+
+```sql
+DROP VIEW view_city_country;
+
+drop view if exists view_city_country;
+Query OK, 0 rows affected (0.01 sec)
+```
+
+## 4 存储过程和函数
+
+### 4.1 存储过程和函数概述
+
+存储过程和函数是事先经过编译并存储在数据库中的一段SQL语句的集合，调用存储过程和函数可以简化应用开发人员的很多工作，减少数据在数据库和应用服务器之间的传输，对于提高数据处理的效率是有好处的。
+
+存储过程和函数的区别在于函数必须有返回值，而存储过程没有。
+
+函数：是一个有返回值的过程；
+
+过程：是一个没有返回值的函数；
+
+### 4.2 创建存储过程
+
+```sql
+CREATE PROCEDURE procedure_name ([proc_parameter[...]])
+begin
+		-- SQL 语句
+end;
+```
+
+实例：
+
+```sql
+#先指定分隔符
+delimiter $
+#再进行存储过程的创建
+create procedure proc_test1() begin select 'Hello Mysql'; end$
+#再恢复分隔符
+delimiter ;
+```
+
+**知识小贴士**
+
+```markdown
+DELIMITER
+该关键字用来声明SQL语句的分隔符，告诉MySQL解释器，该段命令是否已经结束了，MySQL是否可以执行了。默认情况下，delimiter是分号";"，在命令行客户端中，如果有一行命令以分号结束，那么回车后，MySQL将会执行该命令。
+```
+
+### 4.3 调用存储过程
+
+```sql
+call procedure_name();
+
+call proc_test1();
++-------------+
+| Hello Mysql |
++-------------+
+| Hello Mysql |
++-------------+
+1 row in set (0.01 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+```
+
+### 4.4 查看存储过程
+
+```sql
+#查询db_name数据库中的所有的存储过程
+select name from mysql.proc where db='db_name';
+#MySQL8
+SELECT ROUTINE_TYPE, ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA='dbname';
+
+SELECT ROUTINE_TYPE, ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_SCHEMA='demo_01';
++--------------+--------------+
+| ROUTINE_TYPE | ROUTINE_NAME |
++--------------+--------------+
+| PROCEDURE    | proc_test1   |
++--------------+--------------+
+1 row in set (0.00 sec)
+
+
+#查询存储过程的状态信息
+show procedure status \G;
+
+#查询某个存储过程的定义
+show create procedure test.proc_test1 \G;
+
+show create procedure demo_01.proc_test1 \G;
+```
+
+### 4.5 删除存储过程
+
+```sql
+DROP PROCEDURE [IF EXISTS] sp_name;
+```
+
+示例
+
+```sql
+drop procedure if exists proc_test1;
+```
+
+### 4.6 语法
+
+存储过程是可以编程的，意味着可以使用变量，表达式，控制结构，来完成比较复杂的功能。
+
+#### 4.6.1 变量
+
+##### 4.6.1.1 DECLARE
+
+通过DECLARE可以定义一个局部变量，该变量的作用范围只能在BEGIN...END块中。
+
+```sql
+DECLARE var_name[,...] type [DEFAULT value]
+```
+
+示例：
+
+```sql
+delimiter $
+
+#可以一次声明多个变量，中间用,号分隔就行了
+create procedure pro_test2()
+begin
+	declare num int default 5;
+	select num+10;
+	#select concat('num的值为:',num);
+end$
+
+delimiter ;
+
+call pro_test2();
++--------+
+| num+10 |
++--------+
+|     15 |
++--------+
+1 row in set (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+```
+
+##### 4.6.1.2 SET
+
+直接赋值使用SET，可以赋常量或者表达式，具体语法如下：
+
+```sql
+SET var_name= expr [, var_name = expr] ...
+```
+
+示例：
+
+```sql
+DELIMITER $
+
+CREATE PROCEDURE pro_test3()
+BEGIN
+DECLARE NAME VARCHAR(20);
+SET NAME = 'MYSQL';
+SELECT NAME;
+END$
+
+DELIMITER ;
+
+call pro_test3();
++-------+
+| name  |
++-------+
+| mysql |
++-------+
+1 row in set (0.00 sec)
+```
+
+```sql
+delimiter $
+
+create procedure pro_test4()
+begin
+declare num int default 0;
+set num = num+10;
+select num;
+end$
+
+delimiter ;
+
+call pro_test4();
++------+
+| num  |
++------+
+|   10 |
++------+
+1 row in set (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+```
+
+
+
+##### 4.6.1.3 INTO
+
+通过select...into进行赋值操作
+
+```sql
+delimiter $
+
+create procedure test_proc5()
+begin
+declare num int default 0;
+select count(*) into num from city;
+select concat('city表中的记录数为：',num);
+end$
+
+delimiter ;
+
+
+call test_proc5();
++------------------------------------------+
+| concat('city表中的记录数为:',num)        |
++------------------------------------------+
+| city表中的记录数为:4                     |
++------------------------------------------+
+1 row in set (0.01 sec)
+
+#如果此时在city表中插入一条数据，那么再次调用的使用那么就返回为5了
+```
+
+#### 4.6.2 IF
+
+语法：
+
+```sql
+if search_condition then statement_list
+	[else if search_condition then statement_list] ...
+	[else statement_list]
+end if;
+```
+
+需求：
+
+```sql
+根据定义的身高变量，判定当前身高的所属的身材类型
+	180及以上	-----> 身材高挑
+	170-180 	-----> 标准身材
+	170已下		 -----> 一般身材
+```
+
+实例：
+
+```sql
+delimiter $
+
+create procedure pro_test6()
+begin
+declare height int default 175;
+declare description varchar(50) default '';
+if height >= 180 then set description='身材高挑';
+elseif height >= 170 then set description='标准身材';
+else set description='一般身材';
+end if;
+select concat('身高',height,'对应的身材描述:',description);
+end$
+
+delimiter ;
+
+call pro_test6();
++--------------------------------------------------------------+
+| concat('身高',height,'对应的身材描述:',description)          |
++--------------------------------------------------------------+
+| 身高175对应的身材描述:标准身材                               |
++--------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+```
+
+#### 4.6.3 传递参数
+
+语法格式：
+
+```sql
+create procedure procedure_name([in/out/inout] 参数名 参数类型)
+...
+
+IN			: 该参数可以作为参数，也就是需要调用方传入值，默认
+OUT			:	该参数作为输出，也就是该参数可以作为返回值
+INOUT	: 既可以作为输入参数，也可以作为输出参数
+```
+
+##### 4.6.3.1 IN-输入
+
+需求
+
+```markdown
+根据定义的身高变量，判定当前身高的所属的身材类型
+```
+
+实例
+
+```sql
+delimiter $
+
+create procedure pro_test7(in height int)
+begin
+declare description varchar(50) default '';
+if height >= 180 then set description='身材高挑';
+elseif height >= 170 then set description='标准身材';
+else set description='一般身材';
+end if;
+select concat('身高',height,'对应的身材描述:',description);
+end$
+
+delimiter ;
+
+#调用一下看看
+call pro_test7(180);
++--------------------------------------------------------------+
+| concat('身高',height,'对应的身材描述:',description)          |
++--------------------------------------------------------------+
+| 身高180对应的身材描述:身材高挑                               |
++--------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+##### 4.6.3.2 OUT-输出
+
+需求
+
+```markdown
+根据传入的身高变量，获取当前身高的所属的身材类型
+```
+
+实例
+
+```sql
+delimiter $
+
+create procedure pro_test8(in height int,out description varchar(100))
+begin
+if height >= 180 then set description='身材高挑';
+elseif height >= 170 and height < 180 then set description='标准身材';
+else set description='一般身材';
+end if;
+end$
+
+delimiter ;
+
+#调用,@代表的就是用户的会话变量
+call pro_test8(188,@description);
+select @description;
++--------------+
+| @description |
++--------------+
+| 身材高挑     |
++--------------+
+1 row in set (0.00 sec)
+```
+
+**小知识**
+
+@description:这种变量要在变量名称前面加上"@"符号，叫做用户会话变量，代表整个会话过程，都是他的作用域，这个类似于全局变量一样
+
+@@global.sort_buffer_size:这种在变量前加上"@@"符号的，叫做系统变量
+
+```sql
+set name = 'sennerming';
+ERROR 1193 (HY000) : Unknown system variable 'name'
+
+set @name = 'sennerming'; #一点问题也没有
+select @name; #就能查的到了
+```
+
+
+
+#### 4.6.4 case结构
+
+语法结构：
+
+```sql
+方式一：
+case case_value
+when when_value then statement_list
+[when when_value then statement_list]...
+[else statement_list]
+end case;
+
+方式二：
+case
+when search_condition then statement_list
+[when search_condition then statement_list]...
+[else statement_list]
+end case;
+```
+
+需求
+
+```markdown
+给定一个月份，然后计算出所在的季度
+```
+
+```sql
+delimiter $
+
+create procedure pro_test9(in mon int,out result varchar(10))
+begin
+case
+	when mon >=1 and mon <=2 then set result='第一季度';
+	when mon >=4 and mon <=6 then set result='第二季度';
+	when mon >=7 and mon <=9 then set result='第三季度';
+	else set result='第四季度';
+end case;
+end$
+
+delimiter ;
+
+#调用
+call pro_test9(2,@result);
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> select @result;
++--------------+
+| @result      |
++--------------+
+| 第一季度     |
++--------------+
+1 row in set (0.00 sec)
+```
+
+#### 4.6.5 while循环
+
+语法结构
+
+```sql
+while search_condtion do
+ statemtn_list
+end while;
+```
+
+需求
+
+```sql
+计算从1加到n的值
+```
+
+示例
+
+```sql
+delimiter $
+
+create procedure pro_test10(in num int,out result int)
+begin
+declare count int default 0;
+while count <= 10 do
+set num=num+1;
+set count=count+1;
+end while;
+set result = num;
+end$
+
+delimiter ;
+
+call pro_test10(100,@result);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> select @result;
++---------+
+| @result |
++---------+
+|     111 |
++---------+
+1 row in set (0.00 sec)
+
+drop procedure if exists pro_test10;
+```
+
+
+
+#### 4.6.6 repeat结构
+
+有条件的循环控制语句，当满足条件的时候退出循环。while是满足条件财智星，repeat是满足条件就退出循环。
+
+语法结构
+
+```sql
+REPEAT
+	statement_list
+	
+	until search_condtion #这里不需要加分号！！！！
+
+END REPEAT;
+```
+
+需求
+
+```markdown
+计算从1加到n的值
+```
+
+示例
+
+```sql
+delimiter $
+
+create procedure pro_test11(in n int)
+begin
+declare total int default 0;
+repeat
+set total=total+n;
+set n=n-1;
+until n=0
+end repeat;
+select total;
+end$
+
+delimiter ;
+
+#调用下看看
+call pro_test11(8);
++-------+
+| total |
++-------+
+|    36 |
++-------+
+1 row in set (0.00 sec)
+```
+
+
+
+#### 4.6.7 loop语句
+
+LOOP实现简单的循环，退出循环的条件需要使用其他的语句定义，通常可以使用leave语句实现，具体语法如下
+
+```sql
+[begin_label:] LOOP
+statement_list
+END LOOP [end_label]
+```
+
+如果不在statement_list中增加退出循环的语句，那么LOOP语句可以用来实现简单的死循环。
+
+#### 4.6.8 leave语句
+
+用来从标注的流程构造中退出，通常和BEGIN...END或者循环一起使用，下面是一个使用LOOP和LEAVE的简单的例子，退出循环：
+
+```sql
+delimiter $
+
+create procedure pro_test12(in n int)
+begin
+declare total int default 0;
+ins: LOOP
+if n<=0 then leave ins;
+else set n=n-1;set total=total+1;
+end if;
+end LOOP ins;
+select concat('总值是:',total);
+end$
+
+delimiter ;
+
+#调用下看看
+call pro_test12(8);
++----------------------------+
+| concat('总值是:',total)    |
++----------------------------+
+| 总值是:8                   |
++----------------------------+
+1 row in set (0.00 sec)
+
+```
+
+
+
+#### 4.6.9 游标/光标
+
+游标是用来存储查询结果集的数据类型，在存储过程和函数中可以使用光标对结果集进行循环的处理。光标的使用包括光标的声明、OPEN、FETCH和CLOSE，其语法如下：
+
+##### 4.6.9.1 声明光标
+
+```sql
+DECLARE cursor_name CURSOR FOR select_statement;
+```
+
+##### 4.6.9.2 OPEN光标
+
+```sql
+OPEN cursor_name;
+```
+
+##### 4.6.9.3 FETCH光标
+
+```sql
+FETCH cursor_name INTO var_name [,var_name]...
+
+相当于一个指针
++---------+-----------+------------+
+| city_id | city_name | country_id |
++---------+-----------+------------+
+| 1       |	西安市     | 1          |  <=== FETCH一次
++---------+-----------+------------+
+| 2       |	北京市     | 1          |  <=== FETCH二次
++---------+-----------+------------+
+```
+
+##### 4.6.9.4 CLOSE光标
+
+```sql
+CLOSE cursor_name;
+```
+
+实例：
+
+```sql
+#初始化脚本
+create table emp(
+id int(11) not null auto_increment,
+name varchar(50) not null comment '姓名',
+age int(11) comment '年龄',
+salary int(11) comment '薪水',
+primary key (id)
+)engine=innodb default charset=utf8;
+
+insert into emp(id,name,age,salary) values(null,'金毛狮王',18,10000),(null,'白眉鹰王',19,8000),(null,'吉吉国王',8,28000);
+```
+
+```sql
+select * from emp;
++----+--------------+------+--------+
+| id | name         | age  | salary |
++----+--------------+------+--------+
+|  1 | 金毛狮王     |   18 |  10000 |
+|  2 | 白眉鹰王     |   19 |   8000 |
+|  3 | 吉吉国王     |    8 |  28000 |
++----+--------------+------+--------+
+3 rows in set (0.00 sec)
+```
+
+需求
+
+```markdown
+逐行展示这张emp表的数据
+```
+
+```sql
+delimiter $
+
+create procedure peo_test13()
+begin
+	declare e_id int(11);
+	declare e_name varchar(50);
+	declare e_age int(11);
+	declare e_salary int(11);
+	declare emp_result cursor for select * from emp;
+	open emp_result;
+	fetch emp_result into e_id,e_name,e_age,e_salary;
+	select concat('id=',e_id,',name=',e_name,',age=',e_age,',salary=',e_salary);
+	fetch emp_result into e_id,e_name,e_age,e_salary;
+	select concat('id=',e_id,',name=',e_name,',age=',e_age,',salary=',e_salary);
+	close emp_result;
+end$
+
+delimiter ;
+
+#调用下看看
+call peo_test13();
++----------------------------------------------------------------------+
+| concat('id=',e_id,',name=',e_name,',age=',e_age,',salary=',e_salary) |
++----------------------------------------------------------------------+
+| id=1,name=金毛狮王,age=18,salary=10000                               |
++----------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
++----------------------------------------------------------------------+
+| concat('id=',e_id,',name=',e_name,',age=',e_age,',salary=',e_salary) |
++----------------------------------------------------------------------+
+| id=2,name=白眉鹰王,age=19,salary=8000                                |
++----------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+Query OK, 0 rows affected (0.00 sec)
+
+
+那我多FETCH几次怎么办呢？也就是说总共有3条数据，我FETCH了四次，会出现什么情况呢？
+那第四条FETCH会报错：
+ERROR 1329 (02000) : No data - zero rows fetched, selected,or processed
+```
+
+##### 4.6.9.5 FETCH报错解决
+
+```sql
+通过循环结构，来解决这个问题
+
+思路一：先count(*) ---> num；num减到0就退出
+思路二：FETCH不到数据的时候，就会触发一个事件，定义一个边界变量，通过判断这个边界变量来进行循环的退出
+```
+
+```sql
+delimiter $
+
+create procedure peo_test15()
+begin
+	declare e_id int(11);
+	declare e_name varchar(50);
+	declare e_age int(11);
+	declare e_salary int(11);
+	declare has_data defalut 1;
+	declare emp_result cursor for select * from emp;
+	DECLARE EXIT HANDLER FOR NOT FOUND SET has_data=0; #必须写在游标之后
+	
+	open emp_result;
+	repeat
+	fetch emp_result into e_id,e_name,e_age,e_salary;
+	select concat('id=',e_id,',name=',e_name,',age=',e_age,',salary=',e_salary);
+	until has_data=0
+	end repeat;
+	close emp_result;
+end$
+
+delimiter ;
+```
+
+
+
+### 4.7 存储函数
+
+语法结构
+
+```sql
+create function function_name([param type...])
+returns type
+begin
+	...
+end;
+```
+
+案例
+
+```sql
+#定义一个存储过程，获取满足条件(city表中的查询条件)的总记录数
+select * from city;
++---------+-----------+------------+
+| city_id | city_name | country_id |
++---------+-----------+------------+
+|       1 | 西安      |          1 |
+|       2 | 纽约      |          2 |
+|       3 | 北京      |          1 |
+|       4 | 上海      |          1 |
++---------+-----------+------------+
+4 rows in set (0.00 sec)
+
+
+delimiter $
+
+create function count_city(countryId int)
+returns int
+begin
+declare cnum int;
+select count(*) into cnum from city where country_id=countryId;
+return cnum;
+end$
+
+delimiter ;
+
+ERROR 1418 (HY000): This function has none of...
+mysql的设置默认是不允许创建函数
+
+1、更改全局配置
+      SET GLOBAL log_bin_trust_function_creators = 1;  
+      有主从复制的时候 , 从机必须要设置  不然会导致主从同步失败
+
+2、更改配置文件my.cnf  
+      log-bin-trust-function-creators=1   重启服务生效
+
+#如何调用
+select count_city(1);
+
+#如何删除
+drop function count_city;
+```
+
+## 5 触发器
+
+### 5.1 介绍
+
+触发器是与表有关的数据库对象，指在insert/update/delete之前或之后，触发并执行触发器中定义的SQL语句集合。触发器的这种特性可以协助应用在数据库端确保数据的完整性，日志记录，数据校验等操作。
+
+使用别名OLD和NEW来引用触发器中发生变化的记录内容，这与其他的数据库是相似的。现在触发器还只支持行级触发，不支持语句级触发。
+
+| 触发器类型     | NEW和OLD的使用                                       |
+| -------------- | ---------------------------------------------------- |
+| INSERT型触发器 | NEW表示将要或者已经新增的数据                        |
+| UPDATE型触发器 | OLD表示修改之前的数据，NEW表示将要或已经修改后的数据 |
+| DELETE型触发器 | OLD表示将要或者已经删除的数据                        |
+
+### 5.2 创建触发器
+
+语法结构
+
+```sql
+create trigger trigger_name
+
+before/after insert/update/delete
+
+on tbl_name
+
+[ for each row ] -- mysql只有行级触发器，Oracle中既有行级触发器，又有语句级的触发器
+
+begin
+ trigger_statemrnt;
+end;
+```
+
+实例
+
+需求
+
+```sql
+通过触发器记录emp表的数据变更日志，包含增加、修改、删除；
+```
+
+首先创建一张日志表
+
+```sql
+create table emp_logs(
+  id int(11) not null auto_increment,
+  operation varchar(20) not null comment '操作类型,insert/update/deleete',
+  operate_time datetime not null comment '操作时间',
+  operate_id int(11) not null comment '操作的记录的ID',
+  operate_params varchar(500) comment '操作参数',
+  primary key(`id`)
+)engine=innodb default charset=utf8;
+```
+
+创建insert型触发器，完成emp插入数据时的日志记录：
+
+```sql
+DELIMITER $
+
+create trigger emp_insert_trigger
+after insert
+on emp
+for each row
+begin
+insert into emp_logs(id,operation,operate_time,operate_id,operate_params) values(null,'insert',now(),new.id,concat('插入后(id:',new.id,',name:',new.name,',age:',new.age,',salary:',new.salary,')'));
+end$
+
+delimiter ;
+
+#测试这个触发器
+insert into emp(id,name,age,salary) values(null,'Canada King Of Pao',8,28000);
+
+select * from emp_logs;
++----+-----------+---------------------+------------+------------------------------------------------------------+
+| id | operation | operate_time        | operate_id | operate_params                                             |
++----+-----------+---------------------+------------+------------------------------------------------------------+
+|  1 | insert    | 2021-07-03 08:51:29 |          4 | 插入后(id:4,name:Canada King Of Pao,age:8,salary:28000)    |
++----+-----------+---------------------+------------+------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+
+
+创建update后的触发器，完成emp数据修改时的日志记录
+
+```sql
+delimiter $
+
+create trigger emp_update_trigger
+after update
+on emp
+for each row
+begin
+insert into emp_logs(id,operation,operate_time,operate_id,operate_params)
+values(null,'update',now(),new.id,concat('修改前(id:',old.id,',name:',old.name,',age:',old.age,',salary:',old.salary,';修改后:id',new.id,',name:',new.name,',age:',new.age,',salary:',new.salary));
+end$
+
+delimiter ;
+
+#测试一下
+insert into emp(id,name,age,salary) values(null,'隔壁老王',35,58000);
+
+select * from emp;
++----+--------------------+------+--------+
+| id | name               | age  | salary |
++----+--------------------+------+--------+
+|  1 | 金毛狮王           |   18 |  10000 |
+|  2 | 白眉鹰王           |   19 |   8000 |
+|  3 | 吉吉国王           |    8 |  28000 |
+|  4 | Canada King Of Pao |    8 |  28000 |
+|  5 | 隔壁老王           |   35 |  58000 |
++----+--------------------+------+--------+
+5 rows in set (0.00 sec)
+
+
+update emp set salary=5800 where id=5;
+
+select * from emp_logs;
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+| id | operation | operate_time        | operate_id | operate_params                                                                                          |
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+|  1 | insert    | 2021-07-03 08:51:29 |          4 | 插入后(id:4,name:Canada King Of Pao,age:8,salary:28000)                                                 |
+|  2 | insert    | 2021-07-03 09:21:01 |          5 | 插入后(id:5,name:隔壁老王,age:35,salary:58000)                                                          |
+|  3 | update    | 2021-07-03 09:22:13 |          5 | 修改前(id:5,name:隔壁老王,age:35,salary:58000;修改后:id5,name:隔壁老王,age:35,salary:5800               |
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+3 rows in set (0.00 sec)
+```
+
+创建delete后触发器
+
+```sql
+delimiter $
+
+create trigger emp_delete_trigger
+after delete
+on emp
+for each row
+begin
+insert into emp_logs(id,operation,operate_time,operate_id,operate_params)
+values(null,'delete',now(),old.id,concat('删除前(id:',old.id,',name:',old.name,',age:',old.age,',salary:',old.salary));
+end$
+
+delimiter ;
+
+select * from emp;
++----+--------------------+------+--------+
+| id | name               | age  | salary |
++----+--------------------+------+--------+
+|  1 | 金毛狮王           |   18 |  10000 |
+|  2 | 白眉鹰王           |   19 |   8000 |
+|  3 | 吉吉国王           |    8 |  28000 |
+|  4 | Canada King Of Pao |    8 |  28000 |
+|  5 | 隔壁老王           |   35 |   5800 |
++----+--------------------+------+--------+
+5 rows in set (0.01 sec)
+
+delete from emp where id=4;
+
+select * from emp_logs;
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+| id | operation | operate_time        | operate_id | operate_params                                                                                          |
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+|  1 | insert    | 2021-07-03 08:51:29 |          4 | 插入后(id:4,name:Canada King Of Pao,age:8,salary:28000)                                                 |
+|  2 | insert    | 2021-07-03 09:21:01 |          5 | 插入后(id:5,name:隔壁老王,age:35,salary:58000)                                                          |
+|  3 | update    | 2021-07-03 09:22:13 |          5 | 修改前(id:5,name:隔壁老王,age:35,salary:58000;修改后:id5,name:隔壁老王,age:35,salary:5800               |
+|  4 | delete    | 2021-07-03 09:28:04 |          4 | 删除前(id:4,name:Canada King Of Pao,age:8,salary:28000                                                  |
++----+-----------+---------------------+------------+---------------------------------------------------------------------------------------------------------+
+4 rows in set (0.00 sec)
+```
+
+
+
+### 5.3 删除触发器
+
+语法
+
+```sql
+drop trigger [schema_name.]trigger_name
+```
+
+如果没有指定schema_name，默认为当前数据库。
+
+### 5.4 查看触发器
+
+可以通过执行SHOW TRIGGERS命令查看触发器的状态、语法等信息
+
+语法
+
+```sql
+show triggers;
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
